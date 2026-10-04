@@ -15,5 +15,9 @@
   },
   "devDependencies": {
     "jest": "^30.5.2"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "jest"
   }
 }
