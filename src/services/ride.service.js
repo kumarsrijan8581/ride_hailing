@@ -28,6 +28,32 @@ const createRideService = ({
   matchingStrategy,
   radiusKm = 5,
 }) => {
+
+    const findAndReserveDriver = ({
+  pickup,
+  carType,
+}) => {
+  const candidates =
+    matchingStrategy.findDrivers({
+      pickup,
+      carType,
+      radiusKm,
+    });
+
+  for (const candidate of candidates) {
+    const reserved =
+      driverRepository.reserveDriver(
+        candidate.driver.id
+      );
+
+    if (reserved) {
+      return candidate.driver;
+    }
+  }
+
+  return null;
+};
+
   const bookRide = ({
     userId,
     pickup,
@@ -51,60 +77,53 @@ const createRideService = ({
     );
   }
 
-    let match =
-      matchingStrategy.findDriver({
-        pickup,
-        carType,
-        radiusKm,
-      });
+    let driver =
+  findAndReserveDriver({
+    pickup,
+    carType,
+  });
 
-    let actualCarType = carType;
+let actualCarType = carType;
 
     /*
      * Free Hatchback → Sedan upgrade.
      */
-    if (!match && carType === "HATCHBACK") {
-      match =
-        matchingStrategy.findDriver({
-          pickup,
-          carType: "SEDAN",
-          radiusKm,
-        });
+    if (!driver && carType === "HATCHBACK") {
+  driver =
+    findAndReserveDriver({
+      pickup,
+      carType: "SEDAN",
+    });
 
-      if (match) {
-        actualCarType = "SEDAN";
-      }
-    }
+  if (driver) {
+    actualCarType = "SEDAN";
+  }
+}
 
-    if (!match) {
-      throw new Error(
-        "No driver available within the requested radius"
-      );
-    }
+    if (!driver) {
+  throw new Error(
+    "No driver available within the requested radius"
+  );
+}
 
-    const driver = match.driver;
-
-    driver.available = false;
-
-    driverRepository.save(driver);
 
     const ride = createRide({
-      id: crypto.randomUUID(),
+  id: crypto.randomUUID(),
 
-      userId,
+  userId,
 
-      driverId: driver.id,
+  driverId: driver.id,
 
-      requestedCarType: carType,
+  requestedCarType: carType,
 
-      actualCarType,
+  actualCarType,
 
-      pickup,
+  pickup,
 
-      drop,
+  drop,
 
-      couponCode,
-    });
+  couponCode,
+});
 
     return rideRepository.save(ride);
   };
@@ -202,18 +221,11 @@ const getDriverRideHistory = (driverId) => {
     /*
      * Driver becomes available again.
      */
-    const driver =
-      driverRepository.findById(
-        ride.driverId
-      );
+    driverRepository.releaseDriver(
+  ride.driverId
+);
 
-    if (driver) {
-      driver.available = true;
-
-      driverRepository.save(driver);
-    }
-
-    return rideRepository.save(ride);
+return rideRepository.save(ride);
   };
 
   const getRide = (rideId) => {

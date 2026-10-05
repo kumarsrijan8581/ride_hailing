@@ -5,36 +5,38 @@ const {
 const createNearestDriverStrategy = ({
   driverRepository,
 }) => {
-  const findDriver = ({
+  const findDrivers = ({
     pickup,
     carType,
     radiusKm,
   }) => {
-    const drivers = driverRepository.findAvailable();
-
-    const matchingDrivers = drivers
+    return driverRepository
+      .findAvailable()
       .filter((driver) => {
         return driver.carType === carType;
       })
       .map((driver) => ({
         driver,
-        distanceKm: calculateDistanceKm(
-          pickup,
-          driver.location
-        ),
+
+        distanceKm:
+          calculateDistanceKm(
+            pickup,
+            driver.location
+          ),
       }))
       .filter(({ distanceKm }) => {
         return distanceKm <= radiusKm;
       })
       .sort((a, b) => {
-        return a.distanceKm - b.distanceKm;
+        return (
+          a.distanceKm -
+          b.distanceKm
+        );
       });
-
-    return matchingDrivers[0] || null;
   };
 
   return {
-    findDriver,
+    findDrivers,
   };
 };
 
