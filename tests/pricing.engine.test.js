@@ -42,14 +42,13 @@ describe("Pricing Engine", () => {
   });
 
   test("charges hatchback price when upgraded to sedan", () => {
-    const fare = calculateFare({
-      distanceKm: 7,
-      requestedCarType: "HATCHBACK",
-      actualCarType: "SEDAN",
-    });
-
-    expect(fare).toBe(54);
+  const fare = calculateFare({
+    distanceKm: 7,
+    carType: "HATCHBACK",
   });
+
+  expect(fare).toBe(54);
+});
 
   test("applies percentage coupon", () => {
     const fare = calculateFare({

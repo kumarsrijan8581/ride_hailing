@@ -4,9 +4,25 @@ const {
   createRide,
 } = require("../models/ride");
 
-const userRepository = require("../repositories/user.repository");
-const driverRepository = require("../repositories/driver.repository");
-const rideRepository = require("../repositories/ride.repository");
+const userRepository =
+  require("../repositories/user.repository");
+
+const driverRepository =
+  require("../repositories/driver.repository");
+
+const rideRepository =
+  require("../repositories/ride.repository");
+
+const couponRepository =
+  require("../repositories/coupon.repository");
+
+const {
+  calculateDistanceKm,
+} = require("../utils/distance");
+
+const {
+  calculateFare,
+} = require("../pricing/pricing.engine");
 
 const createRideService = ({
   matchingStrategy,
@@ -19,33 +35,41 @@ const createRideService = ({
     carType,
     couponCode = null,
   }) => {
-    const user = userRepository.findById(userId);
+    const user =
+      userRepository.findById(userId);
 
     if (!user) {
       throw new Error("User not found");
     }
 
-    /*
-     * First try the requested car type.
-     */
-    let match = matchingStrategy.findDriver({
-      pickup,
-      carType,
-      radiusKm,
-    });
+    const userRides = rideRepository.findByUserId(userId);
+
+    const hasOngoingRide = userRides.some((ride) => ride.status === "ONGOING");
+    if (hasOngoingRide) {
+    throw new Error(
+      "User already has an ongoing ride"
+    );
+  }
+
+    let match =
+      matchingStrategy.findDriver({
+        pickup,
+        carType,
+        radiusKm,
+      });
 
     let actualCarType = carType;
 
     /*
-     * Mandatory free upgrade:
-     * Hatchback → Sedan if Hatchback unavailable.
+     * Free Hatchback → Sedan upgrade.
      */
     if (!match && carType === "HATCHBACK") {
-      match = matchingStrategy.findDriver({
-        pickup,
-        carType: "SEDAN",
-        radiusKm,
-      });
+      match =
+        matchingStrategy.findDriver({
+          pickup,
+          carType: "SEDAN",
+          radiusKm,
+        });
 
       if (match) {
         actualCarType = "SEDAN";
@@ -60,9 +84,6 @@ const createRideService = ({
 
     const driver = match.driver;
 
-    /*
-     * Mark driver unavailable immediately after assignment.
-     */
     driver.available = false;
 
     driverRepository.save(driver);
@@ -88,8 +109,116 @@ const createRideService = ({
     return rideRepository.save(ride);
   };
 
+  const getUserRideHistory = (userId) => {
+  const user = userRepository.findById(userId);
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  return rideRepository.findByUserId(userId);
+};
+
+const getDriverRideHistory = (driverId) => {
+  const driver = driverRepository.findById(driverId);
+
+  if (!driver) {
+    throw new Error("Driver not found");
+  }
+
+  return rideRepository.findByDriverId(driverId);
+};
+
+  const endRide = (rideId) => {
+    const ride =
+      rideRepository.findById(rideId);
+
+    if (!ride) {
+      throw new Error("Ride not found");
+    }
+
+    if (ride.status !== "ONGOING") {
+      throw new Error(
+        "Ride is not ongoing"
+      );
+    }
+
+    /*
+     * Calculate actual distance from
+     * pickup to drop.
+     */
+    const distanceKm =
+      calculateDistanceKm(
+        ride.pickup,
+        ride.drop
+      );
+
+    /*
+     * Get coupon if one was supplied.
+     */
+    let coupon = null;
+
+    if (ride.couponCode) {
+      coupon =
+        couponRepository.findByCode(
+          ride.couponCode
+        );
+
+      if (!coupon) {
+        throw new Error(
+          "Coupon is no longer valid"
+        );
+      }
+    }
+
+    /*
+     * IMPORTANT:
+     *
+     * If Sedan was a free upgrade,
+     * use requestedCarType for pricing.
+     *
+     * Otherwise use actualCarType.
+     */
+    const pricingCarType =
+      ride.requestedCarType !==
+      ride.actualCarType
+        ? ride.requestedCarType
+        : ride.actualCarType;
+
+    const fare = calculateFare({
+      distanceKm,
+      carType: pricingCarType,
+      coupon,
+    });
+
+    ride.status = "COMPLETED";
+
+    ride.distanceKm = distanceKm;
+
+    ride.fare = fare;
+
+    ride.completedAt = new Date();
+
+    /*
+     * Driver becomes available again.
+     */
+    const driver =
+      driverRepository.findById(
+        ride.driverId
+      );
+
+    if (driver) {
+      driver.available = true;
+
+      driverRepository.save(driver);
+    }
+
+    return rideRepository.save(ride);
+  };
+
   const getRide = (rideId) => {
-    const ride = rideRepository.findById(rideId);
+    const ride =
+      rideRepository.findById(rideId);
 
     if (!ride) {
       throw new Error("Ride not found");
@@ -99,9 +228,12 @@ const createRideService = ({
   };
 
   return {
-    bookRide,
-    getRide,
-  };
+  bookRide,
+  endRide,
+  getRide,
+  getUserRideHistory,
+  getDriverRideHistory,
+};
 };
 
 module.exports = {
