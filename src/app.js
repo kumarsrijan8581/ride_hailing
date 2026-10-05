@@ -2,6 +2,7 @@ const express = require("express");
 
 const userRoutes = require("./routes/user.routes");
 const driverRoutes = require("./routes/driver.routes");
+const rideRoutes = require("./routes/ride.routes");
 
 const app = express();
 
@@ -15,5 +16,6 @@ app.get("/health", (req, res) => {
 
 app.use("/users", userRoutes);
 app.use("/drivers", driverRoutes);
+app.use("/rides", rideRoutes);
 
 module.exports = app;
